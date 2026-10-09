@@ -33,7 +33,7 @@ const syncChannel =
 export const DEFAULT_SETTINGS: AppSettings = {
   competitionTitle: 'FESTIVAL & KOMPETISI KREATIF NASIONAL 2026',
   competitionSubtitle: 'S-IMPEL DIGITAL: Sistem Penilaian Digital & Voting Berbayar Terpadu',
-  competitionDescription: 'Ajang bergengsi unjuk kompetensi keahlian, Keterampilan, kreativitas, pengetahuan dan Vokasi dengan sistem penjurian digital transparan, cepat, dan akuntabel.',
+  competitionDescription: 'Ajang bergengsi tingkat nasional yang mempertemukan talenta-talenta terbaik dari seluruh nusantara dalam berbagai bidang keahlian digital, vokasi, dan orasi kebangsaan. Seluruh proses penjurian menggunakan teknologi S-IMPEL DIGITAL demi menjamin transparansi, keadilan, dan kecepatan hasil.',
   location: 'Auditorium Utama Graha Teknologi & Seni Nusantara, Gedung B',
   eventDateTime: '14 - 16 November 2026 | 08.00 - 17.30 WIB',
   themeColor: 'gold',

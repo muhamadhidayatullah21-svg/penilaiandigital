@@ -1,0 +1,1562 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>S-IMPEL DIGITAL - Sistem Penilaian Digital & Voting Berbayar (Supabase Realtime)</title>
+  <meta name="description" content="Sistem Penilaian Digital dan Voting Berbayar Terpadu untuk Perlombaan dan Kompetisi dengan Supabase Realtime PostgreSQL.">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#fffbeb',
+              100: '#fef3c7',
+              500: '#f59e0b',
+              600: '#d97706',
+              700: '#b45309',
+            }
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            serif: ['Cinzel', 'serif']
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- RESMI: Supabase JS SDK v2 CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    @keyframes pulse-glow {
+      0%, 100% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+      50% { transform: scale(1.04); opacity: 0.9; box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+    }
+    .live-pulse {
+      animation: pulse-glow 2s infinite;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(245, 158, 11, 0.4);
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
+
+  <!-- ================= TOP NAVIGATION BAR ================= -->
+  <header class="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3 cursor-pointer" onclick="navigate('LANDING')">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-600 via-amber-500 to-yellow-300 flex items-center justify-center text-slate-950 shadow-lg shadow-amber-500/20 font-serif font-black text-xl">
+          S
+        </div>
+        <div>
+          <h1 class="font-serif font-bold text-lg tracking-wide bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500 bg-clip-text text-transparent">
+            S-IMPEL DIGITAL
+          </h1>
+          <p class="text-[10px] text-slate-400 tracking-wider">SUPABASE REALTIME EDITION</p>
+        </div>
+      </div>
+
+      <!-- Realtime Connection Status Badge -->
+      <div class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-700 bg-slate-800/80 text-xs">
+        <span id="connIndicator" class="w-2.5 h-2.5 rounded-full bg-emerald-400 live-pulse"></span>
+        <span id="connStatusText" class="font-medium text-emerald-400">Terhubung ke Realtime</span>
+        <span id="liveUpdatedFlash" class="hidden ml-1 px-1.5 py-0.5 text-[9px] font-bold bg-amber-500 text-slate-950 rounded uppercase animate-bounce">
+          LIVE UPDATED!
+        </span>
+      </div>
+
+      <!-- Navigation & Auth -->
+      <div class="flex items-center gap-2 sm:gap-3">
+        <button onclick="navigate('LANDING')" class="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition">
+          Beranda
+        </button>
+        <button onclick="navigate('STANDINGS')" class="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition">
+          Klasemen Live
+        </button>
+        <button onclick="navigate('VOTING')" class="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition">
+          Voting Publik
+        </button>
+
+        <div id="authActions" class="flex items-center gap-2">
+          <!-- Rendered dynamically by JS -->
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= NOTIFICATION TOAST CONTAINER ================= -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
+
+  <!-- ================= MAIN CONTENT VIEWS ================= -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- 1. LANDING PAGE VIEW -->
+    <section id="viewLanding" class="space-y-12">
+      <!-- Hero Banner -->
+      <div class="relative overflow-hidden rounded-3xl bg-gradient-to-b from-slate-900 via-slate-900/90 to-slate-950 border border-slate-800 p-8 sm:p-12 text-center shadow-2xl">
+        <div class="absolute inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-amber-500/10 via-transparent to-transparent pointer-events-none"></div>
+        
+        <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs font-semibold uppercase tracking-wider mb-6">
+          <i data-lucide="sparkles" class="w-4 h-4 text-amber-400"></i>
+          Platform Penjurian &amp; Live Realtime Database
+        </div>
+
+        <h2 id="heroTitle" class="text-3xl sm:text-5xl lg:text-6xl font-serif font-black tracking-tight text-white mb-4">
+          FESTIVAL &amp; KOMPETISI KREATIF NASIONAL 2026
+        </h2>
+
+        <p id="heroSubtitle" class="text-lg sm:text-xl font-medium text-amber-400/90 mb-6 max-w-3xl mx-auto">
+          S-IMPEL DIGITAL: Sistem Penilaian Digital &amp; Voting Berbayar Terpadu
+        </p>
+
+        <!-- Dynamic Event Description (Editable in Admin) -->
+        <div class="max-w-4xl mx-auto p-4 sm:p-6 rounded-2xl bg-slate-800/50 border border-slate-700/60 backdrop-blur-sm text-slate-300 text-sm sm:text-base leading-relaxed mb-8">
+          <p id="heroDescription">
+            Ajang bergengsi tingkat nasional yang mempertemukan talenta-talenta terbaik dari seluruh nusantara dalam berbagai bidang keahlian digital, vokasi, dan orasi kebangsaan. Seluruh proses penjurian menggunakan teknologi S-IMPEL DIGITAL demi menjamin transparansi, keadilan, dan kecepatan hasil.
+          </p>
+        </div>
+
+        <!-- Quick Action Buttons -->
+        <div class="flex flex-wrap items-center justify-center gap-4">
+          <button onclick="navigate('STANDINGS')" class="px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/25 hover:from-amber-400 hover:to-amber-500 transition flex items-center gap-2">
+            <i data-lucide="trophy" class="w-4 h-4"></i>
+            Pantau Klasemen Live Score
+          </button>
+          <button onclick="navigate('VOTING')" class="px-6 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white font-semibold text-sm hover:bg-slate-700 transition flex items-center gap-2">
+            <i data-lucide="vote" class="w-4 h-4 text-amber-400"></i>
+            Dukung Kandidat Favorit (Voting)
+          </button>
+          <button onclick="openSupabaseModal()" class="px-5 py-3 rounded-xl bg-slate-900 border border-emerald-500/40 text-emerald-300 font-semibold text-sm hover:bg-emerald-950/40 transition flex items-center gap-2">
+            <i data-lucide="database" class="w-4 h-4 text-emerald-400"></i>
+            Koneksi Supabase Cloud
+          </button>
+        </div>
+      </div>
+
+      <!-- Event Details & Overview Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="p-6 rounded-2xl bg-slate-900 border border-slate-800 flex items-start gap-4">
+          <div class="p-3 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            <i data-lucide="calendar" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <h3 class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Waktu Pelaksanaan</h3>
+            <p id="eventDateText" class="text-sm font-bold text-slate-100 mt-1">14 - 16 November 2026</p>
+            <p class="text-xs text-slate-400 mt-0.5">08.00 - 17.30 WIB</p>
+          </div>
+        </div>
+
+        <div class="p-6 rounded-2xl bg-slate-900 border border-slate-800 flex items-start gap-4">
+          <div class="p-3 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20">
+            <i data-lucide="map-pin" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <h3 class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Lokasi Utama</h3>
+            <p id="eventLocationText" class="text-sm font-bold text-slate-100 mt-1">Auditorium Graha Teknologi Nusantara</p>
+            <p class="text-xs text-slate-400 mt-0.5">Gedung B &amp; Lab Komputer Terpadu</p>
+          </div>
+        </div>
+
+        <div class="p-6 rounded-2xl bg-slate-900 border border-slate-800 flex items-start gap-4">
+          <div class="p-3 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <i data-lucide="phone-call" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <h3 class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Helpdesk &amp; DANA</h3>
+            <p id="eventDanaText" class="text-sm font-bold text-slate-100 mt-1">081314420312</p>
+            <p class="text-xs text-slate-400 mt-0.5">PANITIA S-IMPEL DIGITAL (OFFICIAL)</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. KLASEMEN LIVE VIEW -->
+    <section id="viewStandings" class="hidden space-y-6">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+        <div>
+          <h2 class="text-2xl font-serif font-bold text-white flex items-center gap-2">
+            <i data-lucide="trophy" class="w-6 h-6 text-amber-400"></i>
+            Papan Peringkat Live Score
+          </h2>
+          <p class="text-xs text-slate-400 mt-1">
+            Data penilaian terverifikasi dari Dewan Juri &bull; Realtime sinkronisasi otomatis
+          </p>
+        </div>
+        <div class="flex items-center gap-2">
+          <select id="standingCategorySelect" onchange="renderStandings()" class="px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs font-semibold text-slate-200 focus:outline-none focus:border-amber-500">
+            <!-- Populated by JS -->
+          </select>
+        </div>
+      </div>
+
+      <div class="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-850 text-slate-400 uppercase tracking-wider border-b border-slate-800">
+              <tr>
+                <th class="px-4 py-3 text-center">Peringkat</th>
+                <th class="px-4 py-3">No. Peserta</th>
+                <th class="px-4 py-3">Nama Peserta / Tim</th>
+                <th class="px-4 py-3">Instansi / Asal Sekolah</th>
+                <th class="px-4 py-3 text-center">Juri Penilai</th>
+                <th class="px-4 py-3 text-center">Waktu Durasi</th>
+                <th class="px-4 py-3 text-right">Skor Rata-Rata</th>
+              </tr>
+            </thead>
+            <tbody id="standingsTableBody" class="divide-y divide-slate-800/60 font-medium">
+              <!-- Populated by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. VOTING PUBLIK VIEW -->
+    <section id="viewVoting" class="hidden space-y-6">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+        <div>
+          <h2 class="text-2xl font-serif font-bold text-white flex items-center gap-2">
+            <i data-lucide="vote" class="w-6 h-6 text-amber-400"></i>
+            Voting Berbayar Kandidat Terfavorit
+          </h2>
+          <p class="text-xs text-slate-400 mt-1">
+            Dukung peserta favorit Anda secara transparan &bull; Pembayaran resmi via DANA: <strong>081314420312</strong>
+          </p>
+        </div>
+
+        <div id="voterBalanceBadge" class="p-3 bg-slate-900 border border-amber-500/30 rounded-2xl flex items-center gap-3">
+          <div class="text-right">
+            <p class="text-[10px] text-slate-400 uppercase font-semibold">Saldo Vote Anda</p>
+            <p id="voterBalanceCount" class="text-lg font-black text-amber-400">0 Poin</p>
+          </div>
+          <button onclick="openTopupModal()" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-xl transition flex items-center gap-1.5">
+            <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+            Isi Saldo (DANA)
+          </button>
+        </div>
+      </div>
+
+      <div id="votingCategoriesGrid" class="space-y-8">
+        <!-- Rendered by JS -->
+      </div>
+    </section>
+
+    <!-- 4. ADMIN DASHBOARD VIEW (HANYA ADMIN) -->
+    <section id="viewAdmin" class="hidden space-y-6">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+              PUSAT KONTROL UTAMA
+            </span>
+            <span class="text-xs text-slate-400">S-IMPEL DIGITAL ADMIN</span>
+          </div>
+          <h2 class="text-2xl font-serif font-bold text-white mt-1">
+            Panel Administrator &amp; Server Data Terpusat
+          </h2>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <button onclick="openSupabaseModal()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow transition flex items-center gap-2">
+            <i data-lucide="cloud" class="w-4 h-4"></i>
+            Koneksi Supabase &amp; SQL Schema
+          </button>
+          <button onclick="openAddParticipantModal()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-xl border border-slate-700 transition flex items-center gap-1.5">
+            <i data-lucide="user-plus" class="w-4 h-4 text-amber-400"></i>
+            Tambah Peserta
+          </button>
+        </div>
+      </div>
+
+      <!-- Admin Tabs Navigation -->
+      <div class="flex items-center gap-2 overflow-x-auto pb-2 border-b border-slate-800 text-xs font-semibold">
+        <button id="adminTabBtnApproval" onclick="switchAdminTab('APPROVAL')" class="px-4 py-2 rounded-xl bg-amber-500 text-slate-950 font-bold">
+          Validasi Skor Juri
+        </button>
+        <button id="adminTabBtnVoting" onclick="switchAdminTab('VOTING')" class="px-4 py-2 rounded-xl bg-slate-900 text-slate-300 hover:bg-slate-800">
+          Verifikasi DANA &amp; Voting
+        </button>
+        <button id="adminTabBtnParticipants" onclick="switchAdminTab('PARTICIPANTS')" class="px-4 py-2 rounded-xl bg-slate-900 text-slate-300 hover:bg-slate-800">
+          Kelola Peserta &amp; Kategori
+        </button>
+        <button id="adminTabBtnSettings" onclick="switchAdminTab('SETTINGS')" class="px-4 py-2 rounded-xl bg-slate-900 text-slate-300 hover:bg-slate-800">
+          Pengaturan &amp; Teks Acara
+        </button>
+      </div>
+
+      <!-- Admin Tab Content 1: Validasi Skor Juri -->
+      <div id="adminTabContentApproval" class="space-y-4">
+        <h3 class="text-sm font-bold text-slate-200">Pengajuan Nilai dari Dewan Juri (Menunggu Persetujuan)</h3>
+        <div id="adminSubmissionsList" class="space-y-3">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Admin Tab Content 2: Verifikasi DANA & Voting -->
+      <div id="adminTabContentVoting" class="hidden space-y-4">
+        <h3 class="text-sm font-bold text-slate-200">Konfirmasi Bukti Transfer DANA (Top Up Saldo Voter)</h3>
+        <div id="adminTransactionsList" class="space-y-3">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Admin Tab Content 3: Kelola Peserta & Kategori -->
+      <div id="adminTabContentParticipants" class="hidden space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold text-slate-200">Daftar Seluruh Peserta Kompetisi</h3>
+          <button onclick="openAddParticipantModal()" class="px-3 py-1.5 bg-amber-500 text-slate-950 text-xs font-bold rounded-lg hover:bg-amber-400">
+            + Tambah Peserta Baru
+          </button>
+        </div>
+        <div class="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-850 text-slate-400 uppercase tracking-wider border-b border-slate-800">
+              <tr>
+                <th class="px-4 py-3">No. Registrasi</th>
+                <th class="px-4 py-3">Nama Lengkap</th>
+                <th class="px-4 py-3">Asal Instansi</th>
+                <th class="px-4 py-3">Kategori Lomba</th>
+                <th class="px-4 py-3 text-right">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="adminParticipantsTableBody" class="divide-y divide-slate-800/60 font-medium">
+              <!-- Populated by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Admin Tab Content 4: Pengaturan & Teks Acara -->
+      <div id="adminTabContentSettings" class="hidden space-y-6">
+        <div class="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+          <h3 class="text-sm font-bold text-amber-400">Edit Teks Publikasi &amp; Deskripsi Lomba</h3>
+          <p class="text-xs text-slate-400">
+            Perubahan teks di bawah ini dapat disimpan langsung ke database Supabase dan otomatis tampil live di halaman depan.
+          </p>
+
+          <div class="space-y-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Judul Kompetisi</label>
+              <input id="inputSettingsTitle" type="text" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500">
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Sub-Judul</label>
+              <input id="inputSettingsSubtitle" type="text" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500">
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Deskripsi Utama (Sesuai Permintaan)</label>
+              <textarea id="inputSettingsDesc" rows="4" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"></textarea>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1">Nomor DANA Panitia</label>
+                <input id="inputSettingsDana" type="text" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1">Nama Pemilik Akun DANA</label>
+                <input id="inputSettingsDanaName" type="text" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500">
+              </div>
+            </div>
+
+            <div class="pt-2">
+              <button onclick="saveAdminSettings()" class="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl transition flex items-center gap-2">
+                <i data-lucide="check" class="w-4 h-4"></i>
+                Simpan Perubahan Pengaturan
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. JURY DASHBOARD VIEW (HANYA JURI) -->
+    <section id="viewJury" class="hidden space-y-6">
+      <div class="border-b border-slate-800 pb-4">
+        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">
+          PANEL PENILAIAN JURI RESMI
+        </span>
+        <h2 class="text-2xl font-serif font-bold text-white mt-1">Formulir Penilaian Digital Juri</h2>
+        <p class="text-xs text-slate-400 mt-1">Pilih peserta yang sedang tampil, masukkan nilai dan durasi, lalu kirim berita acara penilaian.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Kolom Kiri: Pilih Peserta -->
+        <div class="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-amber-400">1. Pilih Peserta Tampil</h3>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Kategori Lomba</label>
+            <select id="juryCategorySelect" onchange="onJuryCategoryChanged()" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white">
+              <!-- Populated by JS -->
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Nama Peserta</label>
+            <select id="juryParticipantSelect" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white">
+              <!-- Populated by JS -->
+            </select>
+          </div>
+
+          <div class="pt-2 border-t border-slate-800">
+            <h4 class="text-xs font-bold text-slate-300 mb-2">Pencatatan Waktu (Stopwatch)</h4>
+            <div class="flex items-center gap-2">
+              <input id="juryTimeInput" type="number" placeholder="Detik (cth: 420)" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white">
+              <span class="text-xs text-slate-400">Detik</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Kolom Tengah: Penilaian Kriteria -->
+        <div class="md:col-span-2 p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-amber-400">2. Lembar Nilai &amp; Pakta Integritas</h3>
+          
+          <div id="juryCriteriaList" class="space-y-4">
+            <!-- Populated by JS -->
+          </div>
+
+          <div class="pt-3 border-t border-slate-800 space-y-3">
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Catatan / Evaluasi Juri (Opsional)</label>
+              <textarea id="juryNotesInput" rows="2" placeholder="Tuliskan catatan teknis untuk peserta..." class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white"></textarea>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <input id="juryIntegrityCheck" type="checkbox" checked class="w-4 h-4 rounded text-amber-500 bg-slate-800 border-slate-700">
+              <label for="juryIntegrityCheck" class="text-xs text-slate-300">
+                Saya menyatakan penilaian ini dilakukan secara independen, adil, objektif, dan bertanggung jawab.
+              </label>
+            </div>
+
+            <button onclick="submitJuryScore()" class="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-sm rounded-xl shadow-lg shadow-amber-500/20 transition flex items-center justify-center gap-2">
+              <i data-lucide="send" class="w-4 h-4"></i>
+              Kirim Nilai ke Admin (Realtime Sync)
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ================= FOOTER ================= -->
+  <footer class="mt-auto border-t border-slate-800/80 bg-slate-900/90 py-6 text-center text-xs text-slate-400">
+    <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+      <p>&copy; 2026 <strong class="text-amber-400">S-IMPEL DIGITAL</strong>. Siap Hosting Mandiri di VPS / cPanel / Netlify / Cloudflare Pages.</p>
+      <p class="text-[11px] text-slate-400">DANA Resmi Panitia: <strong class="text-slate-200">081314420312</strong></p>
+    </div>
+  </footer>
+
+  <!-- ================= MODAL: SUPABASE CONFIGURATION & SQL SCHEMA ================= -->
+  <div id="modalSupabase" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-2xl w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+            <i data-lucide="database" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-white">Konfigurasi Supabase Cloud &amp; Realtime</h3>
+            <p class="text-[11px] text-slate-400">PostgreSQL Backend &bull; Live Time Subscription</p>
+          </div>
+        </div>
+        <button onclick="closeSupabaseModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Supabase Project URL</label>
+          <input id="inputSupabaseUrl" type="url" placeholder="https://xxxxxxxx.supabase.co" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-emerald-500">
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Supabase Anon Public API Key</label>
+          <textarea id="inputSupabaseKey" rows="2" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-emerald-500"></textarea>
+        </div>
+
+        <div class="flex flex-wrap gap-2 pt-1">
+          <button onclick="saveSupabaseConfig()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition flex items-center gap-1.5">
+            <i data-lucide="save" class="w-4 h-4"></i>
+            Simpan Kredensial
+          </button>
+          <button onclick="testSupabaseConnection()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-xl border border-slate-700 transition flex items-center gap-1.5">
+            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+            Tes Koneksi Realtime
+          </button>
+          <button onclick="copySqlSchema()" class="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl transition flex items-center gap-1.5">
+            <i data-lucide="copy" class="w-4 h-4"></i>
+            Salin Skema SQL Supabase
+          </button>
+        </div>
+
+        <div class="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+          <p class="font-bold text-amber-400 flex items-center gap-1.5">
+            <i data-lucide="info" class="w-4 h-4"></i>
+            Langkah Cepat Setup Database:
+          </p>
+          <ol class="list-decimal list-inside space-y-1 text-slate-300 text-[11px] leading-relaxed">
+            <li>Buka dashboard proyek Anda di <a href="https://supabase.com" target="_blank" class="text-emerald-400 underline">supabase.com</a>.</li>
+            <li>Buka menu <strong>SQL Editor</strong>, tempelkan skrip SQL (klik tombol "Salin Skema SQL"), lalu tekan <strong>RUN</strong>.</li>
+            <li>Salin <em>Project URL</em> dan <em>anon public key</em> dari menu Project Settings &gt; API, lalu simpan di formulir ini.</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: AUTHENTICATION (LOGIN / REGISTER) ================= -->
+  <div id="modalAuth" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 id="authModalTitle" class="text-base font-bold text-white">Masuk Akun S-IMPEL DIGITAL</h3>
+        <button onclick="closeAuthModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="authForm" onsubmit="handleAuthSubmit(event)" class="space-y-4 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Username / ID</label>
+          <input id="inputAuthUsername" type="text" required placeholder="Usseradmin / juri_ahmad / voter_andri" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-amber-500">
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Kata Sandi (Password)</label>
+          <input id="inputAuthPassword" type="password" required value="123#" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-amber-500">
+        </div>
+
+        <div id="authRegisterExtra" class="hidden space-y-3">
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Nama Lengkap</label>
+            <input id="inputAuthName" type="text" placeholder="Nama Anda" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Nomor WhatsApp / HP</label>
+            <input id="inputAuthPhone" type="tel" placeholder="08xxxxxxxx" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs">
+          </div>
+        </div>
+
+        <button type="submit" class="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl transition">
+          Masuk Sekarang
+        </button>
+
+        <div class="text-center pt-2">
+          <button type="button" onclick="toggleAuthMode()" id="authModeToggleText" class="text-[11px] text-amber-400 hover:underline">
+            Belum punya akun voter? Daftar Akun Baru
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: TOP UP SALDO DANA ================= -->
+  <div id="modalTopup" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <i data-lucide="wallet" class="w-5 h-5 text-amber-400"></i>
+          Isi Saldo Vote via DANA
+        </h3>
+        <button onclick="closeTopupModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs space-y-1">
+        <p class="text-slate-300">Transfer ke Nomor DANA Resmi Panitia:</p>
+        <p class="text-lg font-mono font-bold text-amber-400">081314420312</p>
+        <p class="text-[11px] text-slate-400">A/N: PANITIA S-IMPEL DIGITAL</p>
+      </div>
+
+      <form onsubmit="handleTopupSubmit(event)" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Jumlah Poin Vote</label>
+          <input id="inputTopupVotes" type="number" min="1" value="10" onchange="updateTopupTotal()" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white">
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Total Pembayaran (Rp 1.000 / vote)</label>
+          <input id="inputTopupTotal" type="text" readonly value="Rp 10.000" class="w-full px-3 py-2 bg-slate-850 border border-slate-700 rounded-xl text-amber-400 font-bold">
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Nama Pengirim DANA</label>
+          <input id="inputTopupSender" type="text" required placeholder="Nama akun DANA pengirim" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white">
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Bukti Transfer (Foto / Screenshot URL)</label>
+          <input id="inputTopupProof" type="text" required placeholder="https://... atau tempel keterangan transfer" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white">
+        </div>
+
+        <button type="submit" class="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl transition">
+          Kirim Bukti Konfirmasi Transfer
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================= JAVASCRIPT LOGIC & SUPABASE INTEGRATION ================= -->
+  <script>
+    // =========================================================================
+    // 1. TEMPAT KONFIGURASI SUPABASE URL & ANON KEY (TERINTEGRASI LENGKAP)
+    // =========================================================================
+    function cleanUrl(raw) {
+      if (!raw) return '';
+      return raw.trim().replace(/\/rest\/v1\/?$/i, '').replace(/\/+$/, '');
+    }
+
+    const SUPABASE_CONFIG = {
+      // URL Project Supabase resmi
+      url: cleanUrl(localStorage.getItem('simpel_supabase_url') || 'https://bmanpqbgoxiqvhbmejyp.supabase.co'),
+      // Anon Public API Key resmi
+      anonKey: (localStorage.getItem('simpel_supabase_anon_key') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJtYW5wcWJnb3hpcXZoYm1lanlwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE1NjM1MTAsImV4cCI6MjEwNzEzOTUxMH0.xhvYz9YmxFWmJSi-foR5FNxXwbVrI2h6J-dhoGTVNfk').trim()
+    };
+
+    let supabaseClient = null;
+    let realtimeChannel = null;
+
+    // Inisialisasi Supabase Client jika URL & Key tersedia
+    function initSupabaseClient() {
+      const targetUrl = cleanUrl(SUPABASE_CONFIG.url);
+      if (targetUrl && SUPABASE_CONFIG.anonKey && window.supabase) {
+        try {
+          supabaseClient = window.supabase.createClient(targetUrl, SUPABASE_CONFIG.anonKey);
+          updateConnectionStatus(true);
+          setupRealtimeSubscription();
+          return true;
+        } catch (err) {
+          console.warn('Gagal koneksi Supabase:', err);
+          updateConnectionStatus(false);
+          return false;
+        }
+      } else {
+        updateConnectionStatus(false);
+        return false;
+      }
+    }
+
+    function updateConnectionStatus(isConnected) {
+      const ind = document.getElementById('connIndicator');
+      const txt = document.getElementById('connStatusText');
+      if (isConnected) {
+        ind.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 live-pulse';
+        txt.className = 'font-medium text-emerald-400';
+        txt.textContent = 'Supabase Realtime Aktif';
+      } else {
+        ind.className = 'w-2.5 h-2.5 rounded-full bg-amber-400';
+        txt.className = 'font-medium text-amber-400';
+        txt.textContent = 'Mode Offline (Lokal)';
+      }
+    }
+
+    // =========================================================================
+    // 2. DATA LOKAL DEFAULT (DAPAT DISINKRONKAN KE SUPABASE SECARA REAL-TIME)
+    // =========================================================================
+    const APP_STATE = {
+      currentUser: null,
+      currentView: 'LANDING',
+      adminTab: 'APPROVAL',
+      isRegisterMode: false,
+      settings: {
+        competitionTitle: 'FESTIVAL & KOMPETISI KREATIF NASIONAL 2026',
+        competitionSubtitle: 'S-IMPEL DIGITAL: Sistem Penilaian Digital & Voting Berbayar Terpadu',
+        competitionDescription: 'Ajang bergengsi tingkat nasional yang mempertemukan talenta-talenta terbaik dari seluruh nusantara dalam berbagai bidang keahlian digital, vokasi, dan orasi kebangsaan. Seluruh proses penjurian menggunakan teknologi S-IMPEL DIGITAL demi menjamin transparansi, keadilan, dan kecepatan hasil.',
+        location: 'Auditorium Utama Graha Teknologi & Seni Nusantara, Gedung B',
+        eventDateTime: '14 - 16 November 2026 | 08.00 - 17.30 WIB',
+        danaTargetNumber: '081314420312',
+        danaTargetName: 'PANITIA S-IMPEL DIGITAL (OFFICIAL)'
+      },
+      categories: [
+        {
+          id: 'cat-web',
+          name: 'Desain & Pengembangan Web Kreatif',
+          criteria: [
+            { id: 'c1', name: 'UI/UX Visual & Estetika', maxScore: 10, type: 'CHECKBOX' },
+            { id: 'c2', name: 'Kualitas Kode & Performa', maxScore: 100, type: 'NUMBER' }
+          ]
+        },
+        {
+          id: 'cat-pidato',
+          name: 'Pidato Kebangsaan & Public Speaking',
+          criteria: [
+            { id: 'cp1', name: 'Artikulasi & Vokal', maxScore: 10, type: 'CHECKBOX' },
+            { id: 'cp2', name: 'Kedalaman Konten Pesan', maxScore: 100, type: 'NUMBER' }
+          ]
+        }
+      ],
+      participants: [
+        { id: 'p1', registrationNumber: 'WEB-001', name: 'Bintang Alamsyah & Tim', institution: 'SMKN 1 Jakarta Raya', categoryId: 'cat-web' },
+        { id: 'p2', registrationNumber: 'WEB-002', name: 'Anisa Rahmawati', institution: 'SMKN 2 Bandung', categoryId: 'cat-web' },
+        { id: 'p3', registrationNumber: 'PID-001', name: 'Cut Mutia Salsabila', institution: 'SMA Negeri 1 Banda Aceh', categoryId: 'cat-pidato' }
+      ],
+      submissions: [
+        {
+          id: 'sub-1',
+          categoryId: 'cat-web',
+          participantId: 'p1',
+          juryId: 'usr-jury-1',
+          juryName: 'Dr. Ir. Ahmad Syahrul, M.Kom',
+          totalScore: 92,
+          timeCompletionSeconds: 7200,
+          status: 'APPROVED',
+          submittedAt: new Date().toISOString()
+        }
+      ],
+      votingCategories: [
+        {
+          id: 'vote-1',
+          name: 'Kandidat Terfavorit Pilihan Publik',
+          pricePerVote: 1000,
+          candidates: [
+            { id: 'c-1', name: 'Bintang Alamsyah (WEB-001)', institution: 'SMKN 1 Jakarta Raya', votesCount: 140 },
+            { id: 'c-2', name: 'Cut Mutia Salsabila (PID-001)', institution: 'SMA Negeri 1 Banda Aceh', votesCount: 215 }
+          ]
+        }
+      ],
+      transactions: [],
+      users: [
+        { id: 'usr-admin-1', username: 'Usseradmin', password: '123#', name: 'Muhamad Hidayatullah (Admin)', role: 'SUPER_ADMIN' },
+        { id: 'usr-jury-1', username: 'juri_ahmad', password: '123#', name: 'Dr. Ir. Ahmad Syahrul, M.Kom', role: 'JURY' },
+        { id: 'usr-voter-1', username: 'voter_andri', password: '123#', name: 'Andri Wijaya', role: 'VOTER', voteBalance: 25 }
+      ]
+    };
+
+    // Muat local storage jika ada
+    function loadSavedState() {
+      const savedUser = localStorage.getItem('simpel_active_user');
+      if (savedUser) {
+        try { APP_STATE.currentUser = JSON.parse(savedUser); } catch(e){}
+      }
+      const savedSettings = localStorage.getItem('simpel_app_settings');
+      if (savedSettings) {
+        try { Object.assign(APP_STATE.settings, JSON.parse(savedSettings)); } catch(e){}
+      }
+    }
+
+    // =========================================================================
+    // 3. REALTIME SUBSCRIPTION (SUPABASE CHANNEL POSTGRES_CHANGES)
+    // =========================================================================
+    function setupRealtimeSubscription() {
+      if (!supabaseClient) return;
+
+      if (realtimeChannel) {
+        realtimeChannel.unsubscribe();
+      }
+
+      realtimeChannel = supabaseClient
+        .channel('simpel_digital_live_channel')
+        .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
+          console.log('⚡ Realtime event received:', payload);
+          triggerLiveFlash();
+          showToast(`⚡ Live Data Berubah (${payload.table} - ${payload.eventType})`, 'info');
+          
+          // Re-render tampilan aktif
+          refreshAllViews();
+        })
+        .subscribe((status) => {
+          console.log('Status Realtime:', status);
+        });
+    }
+
+    function triggerLiveFlash() {
+      const flash = document.getElementById('liveUpdatedFlash');
+      if (flash) {
+        flash.classList.remove('hidden');
+        setTimeout(() => flash.classList.add('hidden'), 3500);
+      }
+    }
+
+    // =========================================================================
+    // 4. SISTEM NOTIFIKASI TOAST
+    // =========================================================================
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      const bg = type === 'error' ? 'bg-red-500 text-white' : type === 'info' ? 'bg-blue-600 text-white' : 'bg-emerald-600 text-white';
+      
+      toast.className = `p-3.5 rounded-2xl shadow-xl flex items-center justify-between text-xs font-semibold ${bg} transition-all duration-300 pointer-events-auto transform translate-y-2 opacity-0`;
+      toast.innerHTML = `
+        <div class="flex items-center gap-2">
+          <span>${message}</span>
+        </div>
+        <button onclick="this.parentElement.remove()" class="ml-3 opacity-80 hover:opacity-100">&times;</button>
+      `;
+
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      }, 50);
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 4000);
+    }
+
+    // =========================================================================
+    // 5. NAVIGASI TAMPILAN
+    // =========================================================================
+    function navigate(viewName) {
+      APP_STATE.currentView = viewName;
+      const views = ['viewLanding', 'viewStandings', 'viewVoting', 'viewAdmin', 'viewJury'];
+      views.forEach(v => document.getElementById(v).classList.add('hidden'));
+
+      if (viewName === 'LANDING') document.getElementById('viewLanding').classList.remove('hidden');
+      if (viewName === 'STANDINGS') {
+        document.getElementById('viewStandings').classList.remove('hidden');
+        renderStandings();
+      }
+      if (viewName === 'VOTING') {
+        document.getElementById('viewVoting').classList.remove('hidden');
+        renderVotingView();
+      }
+      if (viewName === 'ADMIN') {
+        if (!APP_STATE.currentUser || (APP_STATE.currentUser.role !== 'SUPER_ADMIN' && APP_STATE.currentUser.role !== 'SHADOW_ADMIN')) {
+          showToast('Akses ditolak: Hanya untuk Administrator!', 'error');
+          openAuthModal();
+          return;
+        }
+        document.getElementById('viewAdmin').classList.remove('hidden');
+        renderAdminDashboard();
+      }
+      if (viewName === 'JURY') {
+        if (!APP_STATE.currentUser || APP_STATE.currentUser.role !== 'JURY') {
+          showToast('Akses ditolak: Hanya untuk Akun Juri!', 'error');
+          openAuthModal();
+          return;
+        }
+        document.getElementById('viewJury').classList.remove('hidden');
+        renderJuryDashboard();
+      }
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // =========================================================================
+    // 6. RENDER LOGIC
+    // =========================================================================
+    function refreshAllViews() {
+      renderAuthNav();
+      renderLandingInfo();
+      if (APP_STATE.currentView === 'STANDINGS') renderStandings();
+      if (APP_STATE.currentView === 'VOTING') renderVotingView();
+      if (APP_STATE.currentView === 'ADMIN') renderAdminDashboard();
+      if (APP_STATE.currentView === 'JURY') renderJuryDashboard();
+      lucide.createIcons();
+    }
+
+    function renderAuthNav() {
+      const container = document.getElementById('authActions');
+      if (!APP_STATE.currentUser) {
+        container.innerHTML = `
+          <button onclick="openAuthModal()" class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition flex items-center gap-1.5">
+            <i data-lucide="log-in" class="w-3.5 h-3.5"></i>
+            Masuk / Login
+          </button>
+        `;
+      } else {
+        const role = APP_STATE.currentUser.role;
+        let roleBadge = role === 'SUPER_ADMIN' ? 'Admin' : role === 'JURY' ? 'Juri' : 'Voter';
+        let navBtn = '';
+        if (role === 'SUPER_ADMIN' || role === 'SHADOW_ADMIN') {
+          navBtn = `<button onclick="navigate('ADMIN')" class="px-3 py-1.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-lg text-xs font-bold hover:bg-amber-500 hover:text-slate-950 transition">Panel Admin</button>`;
+        } else if (role === 'JURY') {
+          navBtn = `<button onclick="navigate('JURY')" class="px-3 py-1.5 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-lg text-xs font-bold hover:bg-blue-500 hover:text-white transition">Panel Juri</button>`;
+        }
+
+        container.innerHTML = `
+          <div class="flex items-center gap-2">
+            ${navBtn}
+            <div class="text-right hidden sm:block">
+              <p class="text-xs font-bold text-slate-100 leading-none">${APP_STATE.currentUser.name}</p>
+              <p class="text-[10px] text-amber-400 font-semibold">${roleBadge}</p>
+            </div>
+            <button onclick="handleLogout()" title="Keluar" class="p-2 rounded-xl bg-slate-800 hover:bg-red-500/20 hover:text-red-400 text-slate-400 transition">
+              <i data-lucide="log-out" class="w-4 h-4"></i>
+            </button>
+          </div>
+        `;
+      }
+      lucide.createIcons();
+    }
+
+    function renderLandingInfo() {
+      document.getElementById('heroTitle').textContent = APP_STATE.settings.competitionTitle;
+      document.getElementById('heroSubtitle').textContent = APP_STATE.settings.competitionSubtitle;
+      document.getElementById('heroDescription').textContent = APP_STATE.settings.competitionDescription;
+      document.getElementById('eventDanaText').textContent = APP_STATE.settings.danaTargetNumber;
+    }
+
+    function renderStandings() {
+      const select = document.getElementById('standingCategorySelect');
+      if (select.children.length === 0) {
+        select.innerHTML = APP_STATE.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+      }
+      const selectedCatId = select.value || APP_STATE.categories[0]?.id;
+      const filteredParts = APP_STATE.participants.filter(p => p.categoryId === selectedCatId);
+
+      const tbody = document.getElementById('standingsTableBody');
+      if (filteredParts.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="px-4 py-8 text-center text-slate-500">Belum ada peserta di kategori ini.</td></tr>`;
+        return;
+      }
+
+      // Hitung skor per peserta
+      const rankings = filteredParts.map(part => {
+        const subs = APP_STATE.submissions.filter(s => s.participantId === part.id && s.status === 'APPROVED');
+        const avgScore = subs.length > 0 ? (subs.reduce((acc, curr) => acc + curr.totalScore, 0) / subs.length) : 0;
+        const avgTime = subs.length > 0 ? (subs.reduce((acc, curr) => acc + curr.timeCompletionSeconds, 0) / subs.length) : 0;
+        return {
+          ...part,
+          avgScore,
+          avgTime,
+          juriesCount: subs.length
+        };
+      }).sort((a, b) => b.avgScore - a.avgScore);
+
+      tbody.innerHTML = rankings.map((r, idx) => {
+        const rankColor = idx === 0 ? 'text-amber-400 font-black' : idx === 1 ? 'text-slate-300 font-bold' : idx === 2 ? 'text-amber-600 font-bold' : 'text-slate-400';
+        return `
+          <tr class="hover:bg-slate-800/40 transition">
+            <td class="px-4 py-3 text-center ${rankColor}">#${idx + 1}</td>
+            <td class="px-4 py-3 font-mono text-amber-300">${r.registrationNumber}</td>
+            <td class="px-4 py-3 font-semibold text-slate-100">${r.name}</td>
+            <td class="px-4 py-3 text-slate-400">${r.institution}</td>
+            <td class="px-4 py-3 text-center">${r.juriesCount} Juri</td>
+            <td class="px-4 py-3 text-center font-mono text-slate-400">${Math.floor(r.avgTime / 60)}m ${r.avgTime % 60}s</td>
+            <td class="px-4 py-3 text-right font-black text-sm text-emerald-400">${r.avgScore.toFixed(1)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function renderVotingView() {
+      const balanceEl = document.getElementById('voterBalanceCount');
+      balanceEl.textContent = (APP_STATE.currentUser?.voteBalance || 0) + ' Poin';
+
+      const grid = document.getElementById('votingCategoriesGrid');
+      grid.innerHTML = APP_STATE.votingCategories.map(vCat => `
+        <div class="p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="text-base font-bold text-white">${vCat.name}</h3>
+            <span class="text-xs font-mono text-amber-400 font-semibold">Rp ${vCat.pricePerVote.toLocaleString('id-ID')} / Vote</span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            ${vCat.candidates.map(c => `
+              <div class="p-4 rounded-2xl bg-slate-850 border border-slate-800 flex flex-col justify-between space-y-3">
+                <div>
+                  <h4 class="font-bold text-slate-100 text-sm">${c.name}</h4>
+                  <p class="text-xs text-slate-400">${c.institution}</p>
+                </div>
+                <div class="flex items-center justify-between pt-2 border-t border-slate-800">
+                  <span class="font-black text-amber-400 text-sm">${c.votesCount} Suara</span>
+                  <button onclick="castVote('${vCat.id}', '${c.id}', '${c.name}')" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl transition">
+                    Beri Vote
+                  </button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderAdminDashboard() {
+      // 1. Submissions approval list
+      const subList = document.getElementById('adminSubmissionsList');
+      const pendingSubs = APP_STATE.submissions.filter(s => s.status === 'PENDING');
+      if (pendingSubs.length === 0) {
+        subList.innerHTML = `<div class="p-6 text-center text-slate-500 bg-slate-900 rounded-2xl border border-slate-800 text-xs">Semua nilai juri sudah diverifikasi.</div>`;
+      } else {
+        subList.innerHTML = pendingSubs.map(s => {
+          const part = APP_STATE.participants.find(p => p.id === s.participantId);
+          return `
+            <div class="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between gap-4">
+              <div>
+                <p class="font-bold text-slate-100 text-xs">${part?.name || 'Peserta'} (${part?.registrationNumber})</p>
+                <p class="text-[11px] text-slate-400">Juri: ${s.juryName} &bull; Total Nilai: <strong class="text-emerald-400">${s.totalScore}</strong> &bull; Durasi: ${s.timeCompletionSeconds}s</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <button onclick="approveSubmission('${s.id}')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition">
+                  Setujui
+                </button>
+                <button onclick="rejectSubmission('${s.id}')" class="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white font-bold text-xs rounded-xl transition">
+                  Tolak
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      // 2. Transactions approval list
+      const txList = document.getElementById('adminTransactionsList');
+      const pendingTx = APP_STATE.transactions.filter(t => t.status === 'PENDING');
+      if (pendingTx.length === 0) {
+        txList.innerHTML = `<div class="p-6 text-center text-slate-500 bg-slate-900 rounded-2xl border border-slate-800 text-xs">Tidak ada bukti transfer DANA yang menunggu approval.</div>`;
+      } else {
+        txList.innerHTML = pendingTx.map(t => `
+          <div class="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between gap-4">
+            <div>
+              <p class="font-bold text-slate-100 text-xs">${t.userName} &bull; Pengirim: ${t.senderName || '-'}</p>
+              <p class="text-[11px] text-slate-400">${t.amountVotes} Vote &bull; Rp ${t.totalPriceIdr.toLocaleString('id-ID')} &bull; Ref: ${t.referenceCode}</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="approveTransaction('${t.id}')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition">
+                Validasi &amp; Tambah Saldo
+              </button>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      // 3. Participants table
+      const partTbody = document.getElementById('adminParticipantsTableBody');
+      partTbody.innerHTML = APP_STATE.participants.map(p => {
+        const cat = APP_STATE.categories.find(c => c.id === p.categoryId);
+        return `
+          <tr class="hover:bg-slate-850 transition">
+            <td class="px-4 py-3 font-mono text-amber-400">${p.registrationNumber}</td>
+            <td class="px-4 py-3 font-semibold text-slate-100">${p.name}</td>
+            <td class="px-4 py-3 text-slate-400">${p.institution}</td>
+            <td class="px-4 py-3 text-slate-300">${cat?.name || '-'}</td>
+            <td class="px-4 py-3 text-right">
+              <button onclick="deleteParticipant('${p.id}')" class="text-red-400 hover:text-red-300 font-bold">Hapus</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      // 4. Fill Settings form inputs
+      document.getElementById('inputSettingsTitle').value = APP_STATE.settings.competitionTitle;
+      document.getElementById('inputSettingsSubtitle').value = APP_STATE.settings.competitionSubtitle;
+      document.getElementById('inputSettingsDesc').value = APP_STATE.settings.competitionDescription;
+      document.getElementById('inputSettingsDana').value = APP_STATE.settings.danaTargetNumber;
+      document.getElementById('inputSettingsDanaName').value = APP_STATE.settings.danaTargetName;
+    }
+
+    function switchAdminTab(tabName) {
+      APP_STATE.adminTab = tabName;
+      ['Approval', 'Voting', 'Participants', 'Settings'].forEach(t => {
+        document.getElementById(`adminTabContent${t}`).classList.add('hidden');
+        const btn = document.getElementById(`adminTabBtn${t}`);
+        btn.className = 'px-4 py-2 rounded-xl bg-slate-900 text-slate-300 hover:bg-slate-800';
+      });
+
+      const activeName = tabName.charAt(0) + tabName.slice(1).toLowerCase();
+      document.getElementById(`adminTabContent${activeName}`).classList.remove('hidden');
+      document.getElementById(`adminTabBtn${activeName}`).className = 'px-4 py-2 rounded-xl bg-amber-500 text-slate-950 font-bold';
+    }
+
+    function renderJuryDashboard() {
+      const catSelect = document.getElementById('juryCategorySelect');
+      catSelect.innerHTML = APP_STATE.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+      onJuryCategoryChanged();
+    }
+
+    function onJuryCategoryChanged() {
+      const catId = document.getElementById('juryCategorySelect').value;
+      const partSelect = document.getElementById('juryParticipantSelect');
+      const filteredParts = APP_STATE.participants.filter(p => p.categoryId === catId);
+      partSelect.innerHTML = filteredParts.map(p => `<option value="${p.id}">${p.name} (${p.registrationNumber})</option>`).join('');
+
+      const cat = APP_STATE.categories.find(c => c.id === catId);
+      const critContainer = document.getElementById('juryCriteriaList');
+      critContainer.innerHTML = (cat?.criteria || []).map(crit => `
+        <div class="p-3.5 rounded-xl bg-slate-800 border border-slate-700/80 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-200">${crit.name}</span>
+            <span class="text-[10px] text-amber-400 font-mono">Skor Maksimal: ${crit.maxScore}</span>
+          </div>
+          <input type="number" min="0" max="${crit.maxScore}" data-crit-id="${crit.id}" placeholder="Nilai (0 - ${crit.maxScore})" class="juryCritScoreInput w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white">
+        </div>
+      `).join('');
+    }
+
+    // =========================================================================
+    // 7. AKSI BISNIS & MUTASI DATA
+    // =========================================================================
+    function submitJuryScore() {
+      const catId = document.getElementById('juryCategorySelect').value;
+      const partId = document.getElementById('juryParticipantSelect').value;
+      const timeSec = Number(document.getElementById('juryTimeInput').value) || 0;
+      const notes = document.getElementById('juryNotesInput').value;
+
+      if (!partId) {
+        showToast('Pilih peserta terlebih dahulu!', 'error');
+        return;
+      }
+
+      const inputs = document.querySelectorAll('.juryCritScoreInput');
+      let total = 0;
+      inputs.forEach(inp => total += (Number(inp.value) || 0));
+
+      const newSub = {
+        id: 'sub-' + Date.now(),
+        categoryId: catId,
+        participantId: partId,
+        juryId: APP_STATE.currentUser.id,
+        juryName: APP_STATE.currentUser.name,
+        totalScore: total,
+        timeCompletionSeconds: timeSec,
+        status: 'PENDING',
+        notes,
+        submittedAt: new Date().toISOString()
+      };
+
+      APP_STATE.submissions.push(newSub);
+
+      // Jika Supabase terkoneksi, kirim langsung ke database Supabase
+      if (supabaseClient) {
+        supabaseClient.from('jury_submissions').insert([{
+          id: newSub.id,
+          category_id: catId,
+          participant_id: partId,
+          jury_id: newSub.juryId,
+          jury_name: newSub.juryName,
+          total_score: total,
+          time_completion_seconds: timeSec,
+          status: 'PENDING',
+          notes
+        }]).then(({ error }) => {
+          if (error) console.error('Supabase error:', error);
+        });
+      }
+
+      showToast('Nilai berhasil dikirim! Menunggu persetujuan Admin.', 'success');
+      navigate('STANDINGS');
+    }
+
+    function approveSubmission(subId) {
+      const sub = APP_STATE.submissions.find(s => s.id === subId);
+      if (sub) {
+        sub.status = 'APPROVED';
+        if (supabaseClient) {
+          supabaseClient.from('jury_submissions').update({ status: 'APPROVED' }).eq('id', subId);
+        }
+        showToast('Skor juri berhasil disetujui & dipublikasikan!', 'success');
+        renderAdminDashboard();
+      }
+    }
+
+    function rejectSubmission(subId) {
+      APP_STATE.submissions = APP_STATE.submissions.filter(s => s.id !== subId);
+      if (supabaseClient) {
+        supabaseClient.from('jury_submissions').delete().eq('id', subId);
+      }
+      showToast('Skor juri ditolak.', 'info');
+      renderAdminDashboard();
+    }
+
+    function castVote(vCatId, candId, candName) {
+      if (!APP_STATE.currentUser) {
+        showToast('Silakan masuk akun terlebih dahulu untuk memberikan vote!', 'error');
+        openAuthModal();
+        return;
+      }
+      if ((APP_STATE.currentUser.voteBalance || 0) < 1) {
+        showToast('Saldo vote Anda tidak cukup. Silakan isi saldo via DANA!', 'error');
+        openTopupModal();
+        return;
+      }
+
+      APP_STATE.currentUser.voteBalance -= 1;
+      localStorage.setItem('simpel_active_user', JSON.stringify(APP_STATE.currentUser));
+
+      const vCat = APP_STATE.votingCategories.find(v => v.id === vCatId);
+      const cand = vCat?.candidates.find(c => c.id === candId);
+      if (cand) {
+        cand.votesCount += 1;
+      }
+
+      if (supabaseClient) {
+        supabaseClient.from('vote_casts').insert([{
+          id: 'vc-' + Date.now(),
+          user_id: APP_STATE.currentUser.id,
+          user_name: APP_STATE.currentUser.name,
+          candidate_id: candId,
+          candidate_name: candName,
+          voting_category_id: vCatId,
+          votes_given: 1
+        }]);
+      }
+
+      showToast(`Vote berhasil diberikan untuk ${candName}!`, 'success');
+      renderVotingView();
+    }
+
+    function saveAdminSettings() {
+      APP_STATE.settings.competitionTitle = document.getElementById('inputSettingsTitle').value;
+      APP_STATE.settings.competitionSubtitle = document.getElementById('inputSettingsSubtitle').value;
+      APP_STATE.settings.competitionDescription = document.getElementById('inputSettingsDesc').value;
+      APP_STATE.settings.danaTargetNumber = document.getElementById('inputSettingsDana').value;
+      APP_STATE.settings.danaTargetName = document.getElementById('inputSettingsDanaName').value;
+
+      localStorage.setItem('simpel_app_settings', JSON.stringify(APP_STATE.settings));
+
+      if (supabaseClient) {
+        supabaseClient.from('app_settings').upsert({
+          id: 'current_settings',
+          competition_title: APP_STATE.settings.competitionTitle,
+          competition_subtitle: APP_STATE.settings.competitionSubtitle,
+          competition_description: APP_STATE.settings.competitionDescription,
+          dana_target_number: APP_STATE.settings.danaTargetNumber,
+          dana_target_name: APP_STATE.settings.danaTargetName,
+          updated_at: new Date().toISOString()
+        }).then(({ error }) => {
+          if (!error) showToast('Pengaturan tersimpan ke Supabase Cloud!', 'success');
+        });
+      } else {
+        showToast('Pengaturan berhasil diperbarui di memori lokal.', 'success');
+      }
+
+      renderLandingInfo();
+    }
+
+    function deleteParticipant(partId) {
+      if (confirm('Yakin ingin menghapus peserta ini?')) {
+        APP_STATE.participants = APP_STATE.participants.filter(p => p.id !== partId);
+        if (supabaseClient) {
+          supabaseClient.from('participants').delete().eq('id', partId);
+        }
+        showToast('Peserta berhasil dihapus.', 'info');
+        renderAdminDashboard();
+      }
+    }
+
+    function openAddParticipantModal() {
+      const name = prompt('Nama Peserta / Tim:');
+      if (!name) return;
+      const reg = prompt('Nomor Registrasi (misal: WEB-003):', 'REG-' + Math.floor(Math.random() * 900 + 100));
+      const inst = prompt('Asal Sekolah / Instansi:', 'SMK Negeri Unggulan');
+      const catId = APP_STATE.categories[0]?.id || 'cat-web';
+
+      const newPart = {
+        id: 'p-' + Date.now(),
+        name,
+        registrationNumber: reg || 'REG-001',
+        institution: inst || 'Umum',
+        categoryId: catId
+      };
+
+      APP_STATE.participants.push(newPart);
+
+      if (supabaseClient) {
+        supabaseClient.from('participants').insert([{
+          id: newPart.id,
+          registration_number: newPart.registrationNumber,
+          name: newPart.name,
+          institution: newPart.institution,
+          category_id: newPart.categoryId
+        }]);
+      }
+
+      showToast('Peserta baru berhasil ditambahkan!', 'success');
+      renderAdminDashboard();
+    }
+
+    // =========================================================================
+    // 8. AUTENTIKASI LOGIN / REGISTER
+    // =========================================================================
+    function openAuthModal() {
+      document.getElementById('modalAuth').classList.remove('hidden');
+    }
+    function closeAuthModal() {
+      document.getElementById('modalAuth').classList.add('hidden');
+    }
+    function toggleAuthMode() {
+      APP_STATE.isRegisterMode = !APP_STATE.isRegisterMode;
+      document.getElementById('authRegisterExtra').classList.toggle('hidden', !APP_STATE.isRegisterMode);
+      document.getElementById('authModalTitle').textContent = APP_STATE.isRegisterMode ? 'Daftar Akun Voter Baru' : 'Masuk Akun S-IMPEL DIGITAL';
+      document.getElementById('authModeToggleText').textContent = APP_STATE.isRegisterMode ? 'Sudah punya akun? Masuk di sini' : 'Belum punya akun voter? Daftar Akun Baru';
+    }
+
+    function handleAuthSubmit(e) {
+      e.preventDefault();
+      const user = document.getElementById('inputAuthUsername').value.trim();
+      const pass = document.getElementById('inputAuthPassword').value.trim();
+
+      if (APP_STATE.isRegisterMode) {
+        const name = document.getElementById('inputAuthName').value.trim() || user;
+        const newUser = {
+          id: 'usr-voter-' + Date.now(),
+          username: user,
+          password: pass,
+          name,
+          role: 'VOTER',
+          voteBalance: 0
+        };
+        APP_STATE.users.push(newUser);
+        APP_STATE.currentUser = newUser;
+        localStorage.setItem('simpel_active_user', JSON.stringify(newUser));
+        closeAuthModal();
+        showToast(`Selamat datang, ${name}! Pendaftaran berhasil.`, 'success');
+        refreshAllViews();
+        return;
+      }
+
+      const found = APP_STATE.users.find(u => u.username.toLowerCase() === user.toLowerCase() && u.password === pass);
+      if (found) {
+        APP_STATE.currentUser = found;
+        localStorage.setItem('simpel_active_user', JSON.stringify(found));
+        closeAuthModal();
+        showToast(`Berhasil masuk sebagai ${found.name}`, 'success');
+        refreshAllViews();
+        if (found.role === 'SUPER_ADMIN') navigate('ADMIN');
+        else if (found.role === 'JURY') navigate('JURY');
+      } else {
+        showToast('Username atau password salah!', 'error');
+      }
+    }
+
+    function handleLogout() {
+      APP_STATE.currentUser = null;
+      localStorage.removeItem('simpel_active_user');
+      showToast('Anda telah keluar.', 'info');
+      refreshAllViews();
+      navigate('LANDING');
+    }
+
+    // =========================================================================
+    // 9. TOP UP VIA DANA
+    // =========================================================================
+    function openTopupModal() {
+      document.getElementById('modalTopup').classList.remove('hidden');
+    }
+    function closeTopupModal() {
+      document.getElementById('modalTopup').classList.add('hidden');
+    }
+    function updateTopupTotal() {
+      const votes = Number(document.getElementById('inputTopupVotes').value) || 1;
+      const total = votes * 1000;
+      document.getElementById('inputTopupTotal').value = `Rp ${total.toLocaleString('id-ID')}`;
+    }
+
+    function handleTopupSubmit(e) {
+      e.preventDefault();
+      if (!APP_STATE.currentUser) {
+        showToast('Silakan masuk akun terlebih dahulu!', 'error');
+        openAuthModal();
+        return;
+      }
+      const votes = Number(document.getElementById('inputTopupVotes').value) || 1;
+      const sender = document.getElementById('inputTopupSender').value.trim();
+      const proof = document.getElementById('inputTopupProof').value.trim();
+
+      const newTx = {
+        id: 'tx-' + Date.now(),
+        userId: APP_STATE.currentUser.id,
+        userName: APP_STATE.currentUser.name,
+        senderName: sender,
+        amountVotes: votes,
+        totalPriceIdr: votes * 1000,
+        transferProofUrl: proof,
+        referenceCode: 'DANA-' + Math.floor(Math.random() * 900000 + 100000),
+        status: 'PENDING',
+        createdAt: new Date().toISOString()
+      };
+
+      APP_STATE.transactions.push(newTx);
+
+      if (supabaseClient) {
+        supabaseClient.from('vote_transactions').insert([{
+          id: newTx.id,
+          user_id: newTx.userId,
+          user_name: newTx.userName,
+          sender_name: newTx.senderName,
+          amount_votes: newTx.amountVotes,
+          total_price_idr: newTx.totalPriceIdr,
+          transfer_proof_url: newTx.transferProofUrl,
+          reference_code: newTx.referenceCode,
+          status: 'PENDING'
+        }]);
+      }
+
+      closeTopupModal();
+      showToast('Bukti transfer terkirim! Admin akan segera memvalidasi saldo Anda.', 'success');
+    }
+
+    function approveTransaction(txId) {
+      const tx = APP_STATE.transactions.find(t => t.id === txId);
+      if (tx) {
+        tx.status = 'APPROVED';
+        const user = APP_STATE.users.find(u => u.id === tx.userId);
+        if (user) {
+          user.voteBalance = (user.voteBalance || 0) + tx.amountVotes;
+          if (APP_STATE.currentUser?.id === user.id) {
+            APP_STATE.currentUser.voteBalance = user.voteBalance;
+            localStorage.setItem('simpel_active_user', JSON.stringify(APP_STATE.currentUser));
+          }
+        }
+        if (supabaseClient) {
+          supabaseClient.from('vote_transactions').update({ status: 'APPROVED' }).eq('id', txId);
+        }
+        showToast(`Top Up disetujui! Saldo voter bertambah ${tx.amountVotes} Poin.`, 'success');
+        renderAdminDashboard();
+        renderVotingView();
+      }
+    }
+
+    // =========================================================================
+    // 10. MODAL SUPABASE & SKEMA SQL
+    // =========================================================================
+    function openSupabaseModal() {
+      document.getElementById('inputSupabaseUrl').value = SUPABASE_CONFIG.url;
+      document.getElementById('inputSupabaseKey').value = SUPABASE_CONFIG.anonKey;
+      document.getElementById('modalSupabase').classList.remove('hidden');
+    }
+    function closeSupabaseModal() {
+      document.getElementById('modalSupabase').classList.add('hidden');
+    }
+
+    function saveSupabaseConfig() {
+      const url = document.getElementById('inputSupabaseUrl').value.trim();
+      const key = document.getElementById('inputSupabaseKey').value.trim();
+      SUPABASE_CONFIG.url = url;
+      SUPABASE_CONFIG.anonKey = key;
+      localStorage.setItem('simpel_supabase_url', url);
+      localStorage.setItem('simpel_supabase_anon_key', key);
+      
+      const ok = initSupabaseClient();
+      if (ok) {
+        showToast('Kredensial Supabase tersimpan & terhubung!', 'success');
+        closeSupabaseModal();
+      } else {
+        showToast('Kredensial disimpan dalam mode offline.', 'info');
+      }
+    }
+
+    async function testSupabaseConnection() {
+      if (!supabaseClient) {
+        initSupabaseClient();
+      }
+      if (!supabaseClient) {
+        showToast('Isi URL dan Anon Key terlebih dahulu!', 'error');
+        return;
+      }
+      try {
+        const { error } = await supabaseClient.from('app_settings').select('id').limit(1);
+        if (error) {
+          showToast(`Koneksi terhubung namun tabel belum dibuat: ${error.message}`, 'error');
+        } else {
+          showToast('Koneksi Supabase PostgreSQL Realtime 100% SUKSES!', 'success');
+        }
+      } catch (err) {
+        showToast('Gagal menghubungi host Supabase.', 'error');
+      }
+    }
+
+    function copySqlSchema() {
+      const sql = `-- SKEMA SUPABASE S-IMPEL DIGITAL
+CREATE TABLE IF NOT EXISTS public.app_settings (
+  id TEXT PRIMARY KEY DEFAULT 'current_settings',
+  competition_title TEXT,
+  competition_subtitle TEXT,
+  competition_description TEXT,
+  dana_target_number TEXT DEFAULT '081314420312',
+  dana_target_name TEXT DEFAULT 'PANITIA S-IMPEL DIGITAL (OFFICIAL)',
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS public.competition_categories (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  criteria JSONB DEFAULT '[]'::jsonb
+);
+CREATE TABLE IF NOT EXISTS public.participants (
+  id TEXT PRIMARY KEY,
+  registration_number TEXT NOT NULL,
+  name TEXT NOT NULL,
+  institution TEXT NOT NULL,
+  category_id TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS public.jury_submissions (
+  id TEXT PRIMARY KEY,
+  category_id TEXT,
+  participant_id TEXT,
+  jury_id TEXT,
+  jury_name TEXT,
+  total_score NUMERIC DEFAULT 0,
+  time_completion_seconds NUMERIC DEFAULT 0,
+  status TEXT DEFAULT 'PENDING',
+  notes TEXT,
+  submitted_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS public.vote_transactions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  user_name TEXT,
+  sender_name TEXT,
+  amount_votes INTEGER,
+  total_price_idr NUMERIC,
+  reference_code TEXT,
+  status TEXT DEFAULT 'PENDING',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS public.vote_casts (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  user_name TEXT,
+  candidate_id TEXT,
+  candidate_name TEXT,
+  voting_category_id TEXT,
+  votes_given INTEGER,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER PUBLICATION supabase_realtime ADD TABLE app_settings, competition_categories, participants, jury_submissions, vote_transactions, vote_casts;
+ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.competition_categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.participants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.jury_submissions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.vote_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.vote_casts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public All" ON public.app_settings FOR ALL USING (true);
+CREATE POLICY "Public All" ON public.competition_categories FOR ALL USING (true);
+CREATE POLICY "Public All" ON public.participants FOR ALL USING (true);
+CREATE POLICY "Public All" ON public.jury_submissions FOR ALL USING (true);
+CREATE POLICY "Public All" ON public.vote_transactions FOR ALL USING (true);
+CREATE POLICY "Public All" ON public.vote_casts FOR ALL USING (true);`;
+
+      navigator.clipboard.writeText(sql).then(() => {
+        showToast('Skrip SQL berhasil disalin ke clipboard! Siap di-paste ke SQL Editor Supabase.', 'success');
+      }).catch(() => {
+        showToast('Silakan buka file SUPABASE_SCHEMA.sql di root project.', 'info');
+      });
+    }
+
+    // =========================================================================
+    // INITIALIZATION ON DOM READY
+    // =========================================================================
+    document.addEventListener('DOMContentLoaded', () => {
+      loadSavedState();
+      initSupabaseClient();
+      refreshAllViews();
+    });
+  </script>
+</body>
+</html>

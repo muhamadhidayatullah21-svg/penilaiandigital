@@ -51,8 +51,13 @@ import {
   Play,
   Pause,
   RefreshCw,
-  QrCode
+  QrCode,
+  Cloud,
+  Database,
+  Copy,
+  ExternalLink
 } from 'lucide-react';
+import { SupabaseService } from '../utils/supabase';
 
 interface AdminDashboardProps {
   currentUser: User;
@@ -140,6 +145,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [previewAudioPlaying, setPreviewAudioPlaying] = useState<boolean>(false);
   const [previewAudioMuted, setPreviewAudioMuted] = useState<boolean>(false);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Supabase Realtime State
+  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState<boolean>(false);
+  const [supabaseUrlInput, setSupabaseUrlInput] = useState<string>(() => SupabaseService.getConfig().url);
+  const [supabaseKeyInput, setSupabaseKeyInput] = useState<string>(() => SupabaseService.getConfig().anonKey);
+  const [isTestingSupabase, setIsTestingSupabase] = useState<boolean>(false);
+  const [isSyncingSupabase, setIsSyncingSupabase] = useState<boolean>(false);
+  const [supabaseTestResult, setSupabaseTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [isCopiedSql, setIsCopiedSql] = useState<boolean>(false);
 
   const loadAllData = () => {
     const cats = StorageService.getCategories();
@@ -790,7 +804,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       // 2. Teruskan perubahan langsung ke state aplikasi pusat
       onSettingsUpdate(tempSettings);
 
-      // 3. Sinkronisasi pemutar audio BGM jika musik latar kustom diatur
+      // 3. Sinkronisasi publicInfo (judul, deskripsi acara yang diedit admin)
+      const updatedPublicInfo: PublicEventInfo = {
+        ...publicInfo,
+        title: tempSettings.competitionTitle,
+        subTitle: tempSettings.competitionSubtitle,
+        eventDescription: tempSettings.competitionDescription,
+        location: tempSettings.location,
+        eventDate: tempSettings.eventDateTime
+      };
+      StorageService.savePublicInfo(updatedPublicInfo);
+      onPublicInfoUpdate(updatedPublicInfo);
+
+      // 4. Sinkronisasi pemutar audio BGM jika musik latar kustom diatur
       try {
         if (tempSettings.bgmAudioUrl && !tempSettings.bgmAudioUrl.startsWith('idb:')) {
           bgmManager.setCustomAudio(tempSettings.bgmAudioUrl);
@@ -852,7 +878,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setIsSupabaseModalOpen(true);
+              setSupabaseUrlInput(SupabaseService.getConfig().url);
+              setSupabaseKeyInput(SupabaseService.getConfig().anonKey);
+              setSupabaseTestResult(null);
+            }}
+            className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-950/40 border border-emerald-400/40 flex items-center gap-2 cursor-pointer transition-all"
+          >
+            <Cloud className="w-4 h-4 text-emerald-300" />
+            <span>Koneksi Supabase Realtime</span>
+          </button>
+
           <div className="bg-slate-900/90 border border-amber-500/40 rounded-2xl p-3 text-center min-w-[100px]">
             <span className="text-[10px] text-slate-400 uppercase font-bold block">Pending Skor</span>
             <span className="text-xl font-mono font-black text-amber-400">{pendingSubmissions.length}</span>
@@ -2085,6 +2125,227 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: SUPABASE REALTIME CLOUD INTEGRATION */}
+      {isSupabaseModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-emerald-500/40 rounded-3xl max-w-2xl w-full p-6 shadow-2xl text-white space-y-5 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-white">
+                    Konfigurasi Supabase PostgreSQL &amp; Realtime Subscriptions
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Backend Multi-User Mandiri &bull; Live Time Data Sync tanpa Refresh
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSupabaseModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Test result alert */}
+            {supabaseTestResult && (
+              <div
+                className={`p-4 rounded-2xl text-xs font-semibold flex items-start gap-3 ${
+                  supabaseTestResult.success
+                    ? 'bg-emerald-950/80 border border-emerald-500/50 text-emerald-200'
+                    : 'bg-red-950/80 border border-red-500/50 text-red-200'
+                }`}
+              >
+                {supabaseTestResult.success ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                )}
+                <div>
+                  <p className="font-bold">{supabaseTestResult.success ? 'Koneksi Berhasil!' : 'Pemberitahuan Koneksi'}</p>
+                  <p className="mt-0.5 leading-relaxed">{supabaseTestResult.message}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-200 mb-1">
+                  Supabase Project URL:
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://xxxxxxxx.supabase.co"
+                  value={supabaseUrlInput}
+                  onChange={e => setSupabaseUrlInput(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-800 text-white rounded-xl border border-slate-700 font-mono text-xs focus:outline-none focus:border-emerald-500"
+                />
+                <span className="text-[11px] text-slate-400 mt-1 block">
+                  Dapat diperoleh dari Project Settings &gt; API &gt; Project URL di dashboard Supabase.
+                </span>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-200 mb-1">
+                  Supabase Anon Public API Key:
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  value={supabaseKeyInput}
+                  onChange={e => setSupabaseKeyInput(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-800 text-white rounded-xl border border-slate-700 font-mono text-xs focus:outline-none focus:border-emerald-500"
+                />
+                <span className="text-[11px] text-slate-400 mt-1 block">
+                  Kunci publik aman untuk client browser (Project Settings &gt; API &gt; Project API keys &gt; anon public).
+                </span>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    SupabaseService.setConfig(supabaseUrlInput, supabaseKeyInput);
+                    showNotification('Kredensial Supabase berhasil disimpan di perangkat ini!');
+                    setSupabaseTestResult({
+                      success: true,
+                      message: 'Kredensial tersimpan. Silakan klik tombol "Tes Koneksi Realtime" di samping.'
+                    });
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 transition"
+                >
+                  <Check className="w-4 h-4" />
+                  Simpan Kredensial
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isTestingSupabase}
+                  onClick={async () => {
+                    SupabaseService.setConfig(supabaseUrlInput, supabaseKeyInput);
+                    setIsTestingSupabase(true);
+                    const res = await SupabaseService.testConnection();
+                    setIsTestingSupabase(false);
+                    setSupabaseTestResult(res);
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 flex items-center gap-2 transition disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isTestingSupabase ? 'animate-spin' : ''}`} />
+                  {isTestingSupabase ? 'Menguji...' : 'Tes Koneksi Realtime'}
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isSyncingSupabase}
+                  onClick={async () => {
+                    setIsSyncingSupabase(true);
+                    const res = await SupabaseService.pushLocalDataToSupabase({
+                      settings,
+                      publicInfo,
+                      categories,
+                      participants,
+                      submissions,
+                      votingCategories,
+                      transactions,
+                      users
+                    });
+                    setIsSyncingSupabase(false);
+                    setSupabaseTestResult(res);
+                    if (res.success) {
+                      showNotification('Semua data berhasil disinkronkan ke Supabase Cloud!');
+                    }
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-2 transition disabled:opacity-50"
+                >
+                  <Upload className="w-4 h-4" />
+                  {isSyncingSupabase ? 'Mengunggah...' : 'Unggah Semua Data Lokal ke Supabase'}
+                </button>
+              </div>
+
+              {/* Salin Skema SQL */}
+              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-amber-400 flex items-center gap-1.5">
+                    <Database className="w-4 h-4" />
+                    Skema Database SQL &amp; Realtime Subscriptions
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sqlScript = `-- SUPABASE DDL & REALTIME SCHEMA FOR S-IMPEL DIGITAL
+CREATE TABLE IF NOT EXISTS public.users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL DEFAULT '123#', name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'VOTER', phone TEXT, email TEXT, assigned_category_ids JSONB DEFAULT '[]'::jsonb, vote_balance NUMERIC DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS public.app_settings (id TEXT PRIMARY KEY DEFAULT 'current_settings', competition_title TEXT, competition_subtitle TEXT, competition_description TEXT, location TEXT, event_date_time TEXT, theme_color TEXT DEFAULT 'gold', background_image_url TEXT, logo_url TEXT, video_promo_url TEXT, bgm_audio_url TEXT, bgm_file_name TEXT, bgm_enabled BOOLEAN DEFAULT true, bgm_volume NUMERIC DEFAULT 0.35, voting_enabled BOOLEAN DEFAULT true, dana_transfer_enabled BOOLEAN DEFAULT true, dana_target_number TEXT DEFAULT '081314420312', dana_target_name TEXT DEFAULT 'PANITIA S-IMPEL DIGITAL (OFFICIAL)', default_price_per_vote NUMERIC DEFAULT 1000, updated_at TIMESTAMPTZ DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS public.public_info (id TEXT PRIMARY KEY DEFAULT 'current_public_info', title TEXT, sub_title TEXT, event_description TEXT, location TEXT, event_date TEXT, contact_person TEXT, rules_overview JSONB DEFAULT '[]'::jsonb, schedule_overview JSONB DEFAULT '[]'::jsonb, updated_at TIMESTAMPTZ DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS public.competition_categories (id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT, location TEXT, schedule_time TEXT, max_duration_minutes INTEGER DEFAULT 180, rules JSONB DEFAULT '[]'::jsonb, assigned_jury_ids JSONB DEFAULT '[]'::jsonb, criteria JSONB DEFAULT '[]'::jsonb, created_at TIMESTAMPTZ DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS public.participants (id TEXT PRIMARY KEY, registration_number TEXT NOT NULL, name TEXT NOT NULL, institution TEXT NOT NULL, category_id TEXT NOT NULL, contact TEXT, photo_url TEXT, created_at TIMESTAMPTZ DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS public.jury_submissions (id TEXT PRIMARY KEY, category_id TEXT NOT NULL, participant_id TEXT NOT NULL, jury_id TEXT NOT NULL, jury_name TEXT NOT NULL, criteria_scores JSONB DEFAULT '{}'::jsonb, penalties JSONB DEFAULT '[]'::jsonb, total_score NUMERIC DEFAULT 0, time_completion_seconds NUMERIC DEFAULT 0, signature_data_url TEXT, integrity_pact_accepted BOOLEAN DEFAULT true, notes TEXT, status TEXT DEFAULT 'PENDING', admin_notes TEXT, submitted_at TIMESTAMPTZ DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS public.voting_categories (id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT, price_per_vote NUMERIC DEFAULT 1000, is_active BOOLEAN DEFAULT true, candidates JSONB DEFAULT '[]'::jsonb, created_at TIMESTAMPTZ DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS public.vote_transactions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, user_name TEXT NOT NULL, user_phone TEXT NOT NULL, sender_name TEXT, amount_votes INTEGER NOT NULL, total_price_idr NUMERIC NOT NULL, dana_account_number TEXT DEFAULT '081314420312', transfer_proof_url TEXT, reference_code TEXT NOT NULL, status TEXT DEFAULT 'PENDING', notes TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), verified_at TIMESTAMPTZ);
+CREATE TABLE IF NOT EXISTS public.vote_casts (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, user_name TEXT NOT NULL, candidate_id TEXT NOT NULL, candidate_name TEXT NOT NULL, voting_category_id TEXT NOT NULL, votes_given INTEGER NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW());
+ALTER PUBLICATION supabase_realtime ADD TABLE public.users, public.app_settings, public.public_info, public.competition_categories, public.participants, public.jury_submissions, public.voting_categories, public.vote_transactions, public.vote_casts;
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.public_info ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.competition_categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.participants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.jury_submissions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.voting_categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.vote_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.vote_casts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public Users" ON public.users FOR ALL USING (true);
+CREATE POLICY "Public Settings" ON public.app_settings FOR ALL USING (true);
+CREATE POLICY "Public Info" ON public.public_info FOR ALL USING (true);
+CREATE POLICY "Public Cats" ON public.competition_categories FOR ALL USING (true);
+CREATE POLICY "Public Parts" ON public.participants FOR ALL USING (true);
+CREATE POLICY "Public Subs" ON public.jury_submissions FOR ALL USING (true);
+CREATE POLICY "Public Votes" ON public.voting_categories FOR ALL USING (true);
+CREATE POLICY "Public Tx" ON public.vote_transactions FOR ALL USING (true);
+CREATE POLICY "Public Casts" ON public.vote_casts FOR ALL USING (true);`;
+                      navigator.clipboard.writeText(sqlScript);
+                      setIsCopiedSql(true);
+                      showNotification('Skema SQL berhasil disalin ke clipboard! Buka SQL Editor di dashboard Supabase untuk menjalankannya.');
+                      setTimeout(() => setIsCopiedSql(false), 3000);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    {isCopiedSql ? 'Tersalin ke Clipboard!' : 'Salin Skrip SQL Lengkap'}
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Skrip ini akan otomatis membuat semua tabel, mengaktifkan Supabase Realtime Publication untuk semua event INSERT/UPDATE/DELETE, dan menerapkan aturan RLS (Row Level Security).
+                </p>
+              </div>
+
+              {/* Standalone Hosting File Link */}
+              <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700 flex items-center justify-between gap-4">
+                <div>
+                  <h4 className="font-bold text-slate-200 text-xs">File HTML Siap Hosting Mandiri</h4>
+                  <p className="text-[11px] text-slate-400">
+                    File <code className="text-amber-400">public/standalone-supabase.html</code> dapat langsung di-upload ke VPS, cPanel, Nginx, Apache, Netlify, atau Cloudflare Pages.
+                  </p>
+                </div>
+                <a
+                  href="/standalone-supabase.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-950 text-slate-200 border border-slate-700 font-bold text-xs flex items-center gap-1.5 transition shrink-0"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
+                  Buka Standalone HTML
+                </a>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -8,6 +8,7 @@ import {
   VotingCategory
 } from './types';
 import { StorageService } from './utils/storage';
+import { SupabaseService } from './utils/supabase';
 import { Navbar } from './components/Navbar';
 import { AudioPlayer } from './components/AudioPlayer';
 import { LandingPage } from './views/LandingPage';
@@ -67,6 +68,16 @@ export default function App() {
       }
     });
 
+    // Supabase Realtime synchronization listener
+    const unsubSupabase = SupabaseService.subscribeRealtime((table, payload) => {
+      console.log('⚡ Supabase realtime change in table:', table);
+      setSettings(StorageService.getSettings());
+      setPublicInfo(StorageService.getPublicInfo());
+      setCategories(StorageService.getCategories());
+      setParticipants(StorageService.getParticipants());
+      setVotingCategories(StorageService.getVotingCategories());
+    });
+
     // Periodic lightweight sync heartbeat (2.5 seconds) to ensure 100% sync reliability
     const intervalId = window.setInterval(() => {
       setCategories(StorageService.getCategories());
@@ -76,6 +87,7 @@ export default function App() {
 
     return () => {
       unsubscribe();
+      unsubSupabase();
       window.clearInterval(intervalId);
     };
   }, []);
